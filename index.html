@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Real vs Presupuesto USD — Conta Tech Operativo</title>
+<style>
+  :root{
+    color-scheme: light;
+    --plane:#f9f9f7; --surface:#fcfcfb;
+    --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+    --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,.10);
+    --s1:#2a78d6;  /* Presupuesto */
+    --s2:#eb6834;  /* Real */
+    --up:#006300; --down:#d03b3b;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      color-scheme: dark;
+      --plane:#0d0d0d; --surface:#1a1a19;
+      --ink:#ffffff; --ink2:#c3c2b7; --muted:#898781;
+      --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.10);
+      --s1:#3987e5; --s2:#d95926;
+      --up:#0ca30c; --down:#e66767;
+    }
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--plane); color:var(--ink);
+    font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;
+    padding:28px 20px 40px;
+  }
+  .wrap{max-width:900px;margin:0 auto}
+  h1{font-size:20px;line-height:1.3;margin:0 0 4px;font-weight:600;letter-spacing:-.01em}
+  .sub{color:var(--ink2);font-size:13px;margin:0 0 22px}
+  .sub code{font-size:12px;color:var(--muted)}
+
+  /* stat tiles */
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:22px}
+  .tile{background:var(--surface);border:1px solid var(--ring);border-radius:10px;padding:14px 16px}
+  .tile .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px}
+  .tile .val{font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.1}
+  .tile .note{font-size:12px;color:var(--ink2);margin-top:4px}
+  .neg{color:var(--down)} .pos{color:var(--up)}
+
+  .card{background:var(--surface);border:1px solid var(--ring);border-radius:10px;padding:18px 18px 14px}
+  .head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+  h2{font-size:15px;margin:0;font-weight:600}
+  .hint{font-size:12px;color:var(--muted)}
+  .legend{display:flex;gap:16px;align-items:center;margin:12px 0 16px;font-size:12px;color:var(--ink2)}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+
+  .plot{position:relative}
+  .gridlayer{position:absolute;inset:0 84px 20px 44px;pointer-events:none}
+  .gridlayer span{position:absolute;top:0;bottom:0;width:1px;background:var(--grid)}
+  .gridlayer span:first-child{background:var(--axis)}
+
+  .row{display:grid;grid-template-columns:38px 1fr 78px;align-items:center;gap:6px;padding:5px 0;position:relative;border-radius:6px}
+  .row:hover{background:color-mix(in srgb, var(--ink) 4%, transparent)}
+  .cat{font-size:12px;font-weight:600;color:var(--ink2);font-variant-numeric:tabular-nums}
+  .bars{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .bar{height:11px;border-radius:0 4px 4px 0;position:relative;cursor:default;min-width:1px}
+  .bar.ppto{background:var(--s1)}
+  .bar.real{background:var(--s2)}
+  .bar .dl{position:absolute;left:100%;top:50%;transform:translateY(-50%);margin-left:7px;
+           font-size:11px;color:var(--ink2);white-space:nowrap;font-variant-numeric:tabular-nums}
+  .bar.zero{background:none;width:100%!important;height:11px;border-radius:0;
+            border-top:1px dashed var(--axis);border-radius:0;
+            background-clip:padding-box;position:relative}
+  .bar.zero{display:flex;align-items:center}
+  .bar.zero::after{content:"";flex:1;border-top:1px dashed var(--axis)}
+  .bar.zero{border-top:none}
+  .varc{font-size:12px;white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums;font-weight:600;color:var(--ink2)}
+  .varc small{font-weight:400;color:var(--muted)}
+  .varc .ar{color:var(--muted);font-weight:400}
+
+  .axis{display:grid;grid-template-columns:38px 1fr 78px;gap:6px;margin-top:6px}
+  .ticks{position:relative;height:16px}
+  .ticks span{position:absolute;transform:translateX(-50%);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+  /* tooltip */
+  #tip{position:fixed;z-index:9;pointer-events:none;opacity:0;transition:opacity .1s;
+       background:var(--surface);color:var(--ink);border:1px solid var(--ring);
+       border-radius:8px;padding:9px 11px;font-size:12px;line-height:1.45;
+       box-shadow:0 6px 20px rgba(0,0,0,.16);min-width:170px}
+  #tip b{font-size:13px}
+  #tip .r{display:flex;justify-content:space-between;gap:14px;font-variant-numeric:tabular-nums}
+  #tip .r i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:0}
+  #tip .m{color:var(--ink2)}
+
+  /* table */
+  .toggle{background:none;border:1px solid var(--ring);border-radius:6px;color:var(--ink2);
+          font:inherit;font-size:12px;padding:4px 10px;cursor:pointer}
+  .toggle:hover{color:var(--ink)}
+  table{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;font-variant-numeric:tabular-nums}
+  th,td{text-align:right;padding:6px 8px;border-bottom:1px solid var(--grid)}
+  th:first-child,td:first-child{text-align:left}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+  tfoot td{font-weight:600;border-bottom:none;border-top:1px solid var(--axis)}
+  [hidden]{display:none!important}
+  .foot{margin-top:18px;font-size:12px;color:var(--muted);line-height:1.6}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Real vs. Presupuesto en USD, por Línea de Negocio</h1>
+  <p class="sub">Modelo <strong>MODELO EJEMPLO</strong> · tabla <code>BaseOps</code> · 1.367 registros · ejercicio 2020 (01-ene a 29-dic)</p>
+
+  <div class="tiles">
+    <div class="tile">
+      <div class="lbl">Total Real USD</div>
+      <div class="val" id="tReal"></div>
+      <div class="note">612 unidades</div>
+    </div>
+    <div class="tile">
+      <div class="lbl">Total Ppto USD</div>
+      <div class="val" id="tPpto"></div>
+      <div class="note">823 unidades</div>
+    </div>
+    <div class="tile">
+      <div class="lbl">Var % USD</div>
+      <div class="val" id="tVar"></div>
+      <div class="note">ejecutado por debajo de lo presupuestado</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="head">
+      <h2>Ejecución por línea de negocio</h2>
+      <button class="toggle" id="tg" aria-expanded="false">Ver tabla</button>
+    </div>
+    <div class="hint">Ordenado por monto real, de mayor a menor. Pasá el mouse sobre cada barra para el detalle.</div>
+
+    <div class="legend">
+      <span><i style="background:var(--s1)"></i>Presupuesto</span>
+      <span><i style="background:var(--s2)"></i>Real</span>
+      <span class="hint">Línea punteada = sin movimientos · ▲ por encima del presupuesto, ▼ por debajo</span>
+    </div>
+
+    <div class="plot">
+      <div class="gridlayer" id="gl"></div>
+      <div id="rows"></div>
+      <div class="axis"><div></div><div class="ticks" id="tk"></div><div></div></div>
+    </div>
+
+    <div id="tblWrap" hidden>
+      <table>
+        <thead><tr><th>Línea</th><th>Presupuesto USD</th><th>Real USD</th><th>Desvío USD</th><th>Var %</th></tr></thead>
+        <tbody id="tb"></tbody>
+        <tfoot id="tf"></tfoot>
+      </table>
+    </div>
+  </div>
+
+  <p class="foot">
+    Fuente: <code>Conta Tech - Operativo (Demo).xlsx</code>, hoja <em>Base</em>, con las transformaciones de Power Query del modelo aplicadas
+    (R20 → Real, P20 → Presupuesto; normalización de proveedor; línea de negocio en mayúsculas).<br>
+    Réplica de las medidas <code>Total Real USD</code>, <code>Total Ppo USD</code> y <code>Var % USD.</code>
+  </p>
+</div>
+
+<div id="tip" role="tooltip"></div>
+
+<script>
+const DATA=[{"ln":"SFN","ppto":37419.2,"real":61318.0,"var":63.9},{"ln":"LUQ","ppto":31856.0,"real":53837.8,"var":69.0},{"ln":"EZE","ppto":70094.8,"real":51054.3,"var":-27.2},{"ln":"UAQ","ppto":24471.6,"real":37120.9,"var":51.7},{"ln":"COR","ppto":53481.6,"real":35876.0,"var":-32.9},{"ln":"RZA","ppto":22648.0,"real":30180.7,"var":33.3},{"ln":"MDZ","ppto":46654.0,"real":26371.8,"var":-43.5},{"ln":"RES","ppto":37419.2,"real":24374.9,"var":-34.9},{"ln":"CRD","ppto":32575.8,"real":22263.1,"var":-31.7},{"ln":"SLA","ppto":39103.2,"real":20539.0,"var":-47.5},{"ln":"IRJ","ppto":53462.0,"real":19199.3,"var":-64.1},{"ln":"IGR","ppto":0,"real":15451.4,"var":null},{"ln":"FMA","ppto":0,"real":8097.0,"var":null},{"ln":"JUJ","ppto":8814.0,"real":3785.1,"var":-57.1},{"ln":"BRC","ppto":50195.6,"real":0,"var":-100.0}];
+const TOT={real:409469.3,ppto:508194.9,varUSD:-19.43};
+
+const n0=v=>v.toLocaleString('es-AR',{maximumFractionDigits:0});
+const nk=v=>(v/1000).toLocaleString('es-AR',{maximumFractionDigits:1})+'k';
+const pc=v=>(v>0?'+':'')+v.toLocaleString('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%';
+
+document.getElementById('tReal').textContent='$'+n0(TOT.real);
+document.getElementById('tPpto').textContent='$'+n0(TOT.ppto);
+document.getElementById('tVar').textContent=pc(TOT.varUSD);
+
+const MAX=80000, TICKS=[0,20000,40000,60000,80000];
+const gl=document.getElementById('gl');
+TICKS.forEach(t=>{const s=document.createElement('span');s.style.left=(t/MAX*100)+'%';gl.appendChild(s)});
+const tk=document.getElementById('tk');
+TICKS.forEach(t=>{const s=document.createElement('span');s.style.left=(t/MAX*100)+'%';s.textContent=t?nk(t):'0';tk.appendChild(s)});
+
+const rowsEl=document.getElementById('rows');
+DATA.forEach(d=>{
+  const row=document.createElement('div');row.className='row';
+  const cat=document.createElement('div');cat.className='cat';cat.textContent=d.ln;row.appendChild(cat);
+
+  const bars=document.createElement('div');bars.className='bars';
+  [['ppto','Presupuesto',d.ppto],['real','Real',d.real]].forEach(([k,name,v])=>{
+    const b=document.createElement('div');
+    if(v===0){b.className='bar zero';b.dataset.k=k;}
+    else{b.className='bar '+k;b.style.width=(v/MAX*100)+'%';b.dataset.k=k;}
+    if(k==='real'&&v>0){const dl=document.createElement('span');dl.className='dl';dl.textContent=n0(v);b.appendChild(dl)}
+    b._d={...d,name,v};
+    bars.appendChild(b);
+  });
+  row.appendChild(bars);
+
+  const vc=document.createElement('div');vc.className='varc';
+  if(d.var===null){vc.innerHTML='<small>s/ppto</small>'}
+  else{vc.innerHTML='<span class="ar">'+(d.var>=0?'▲':'▼')+'</span> '+pc(d.var)}
+  row.appendChild(vc);
+  rowsEl.appendChild(row);
+});
+
+/* tooltip */
+const tip=document.getElementById('tip');
+function show(e,d){
+  const desvio=d.real-d.ppto;
+  tip.innerHTML='<b>'+d.ln+'</b>'
+   +'<div class="r"><span><i style="background:var(--s1)"></i>Presupuesto</span><span>'+(d.ppto?'$'+n0(d.ppto):'—')+'</span></div>'
+   +'<div class="r"><span><i style="background:var(--s2)"></i>Real</span><span>'+(d.real?'$'+n0(d.real):'—')+'</span></div>'
+   +'<div class="r m"><span>Desvío</span><span>'+(desvio>0?'+':'')+'$'+n0(desvio)+'</span></div>'
+   +(d.var===null?'<div class="r m"><span>Var %</span><span>sin presupuesto</span></div>'
+                 :'<div class="r m"><span>Var %</span><span>'+pc(d.var)+'</span></div>');
+  tip.style.opacity=1;move(e);
+}
+function move(e){
+  const r=tip.getBoundingClientRect();
+  let x=e.clientX+14, y=e.clientY+14;
+  if(x+r.width>innerWidth-8) x=e.clientX-r.width-14;
+  if(y+r.height>innerHeight-8) y=e.clientY-r.height-14;
+  tip.style.left=x+'px';tip.style.top=y+'px';
+}
+rowsEl.addEventListener('mouseover',e=>{const b=e.target.closest('.bar');if(b&&b._d)show(e,b._d)});
+rowsEl.addEventListener('mousemove',e=>{if(tip.style.opacity==1)move(e)});
+rowsEl.addEventListener('mouseout',e=>{if(!e.relatedTarget||!e.relatedTarget.closest('.bar'))tip.style.opacity=0});
+
+/* table */
+const tb=document.getElementById('tb');
+DATA.forEach(d=>{
+  const desvio=d.real-d.ppto;
+  const tr=document.createElement('tr');
+  tr.innerHTML='<td>'+d.ln+'</td><td>'+(d.ppto?n0(d.ppto):'—')+'</td><td>'+(d.real?n0(d.real):'—')+'</td>'
+    +'<td>'+(desvio>0?'+':'')+n0(desvio)+'</td>'
+    +'<td>'+(d.var===null?'s/ppto':(d.var>=0?'▲ ':'▼ ')+pc(d.var))+'</td>';
+  tb.appendChild(tr);
+});
+document.getElementById('tf').innerHTML='<tr><td>Total</td><td>'+n0(TOT.ppto)+'</td><td>'+n0(TOT.real)
+  +'</td><td>'+n0(TOT.real-TOT.ppto)+'</td><td>▼ '+pc(TOT.varUSD)+'</td></tr>';
+
+const tg=document.getElementById('tg'), tw=document.getElementById('tblWrap');
+tg.addEventListener('click',()=>{
+  const open=tw.hidden;
+  tw.hidden=!open; tg.setAttribute('aria-expanded',String(open));
+  tg.textContent=open?'Ocultar tabla':'Ver tabla';
+});
+</script>
+</body>
+</html>
